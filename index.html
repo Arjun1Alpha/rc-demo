@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audio Recorder with Background Music</title>
+  </head>
+  <body>
+    <button id="recordButton">Record</button>
+    <button id="stopButton" disabled>Stop</button>
+    <audio id="audioElement" controls></audio>
+
+    <script>
+      let mediaRecorder;
+      let audioChunks = [];
+      let audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      let userMediaStream;
+      let audioSource;
+      let audioBuffer;
+
+      const recordButton = document.getElementById("recordButton");
+      const stopButton = document.getElementById("stopButton");
+      const audioElement = document.getElementById("audioElement");
+
+      recordButton.addEventListener("click", startRecording);
+      stopButton.addEventListener("click", stopRecording);
+
+      // Load the song
+      function loadSong(url) {
+        return fetch(url)
+          .then((response) => response.arrayBuffer())
+          .then((buffer) => audioContext.decodeAudioData(buffer))
+          .then((decodedData) => {
+            audioBuffer = decodedData;
+          })
+          .catch((error) => console.error("Error loading song:", error));
+      }
+
+      // Play the song
+      function playSong() {
+        audioSource = audioContext.createBufferSource();
+        audioSource.buffer = audioBuffer;
+        audioSource.connect(audioContext.destination);
+        audioSource.start(0);
+      }
+
+      // async function startRecording() {
+      //   await loadSong('./song.mp3');
+
+      //   // Start playing the song
+      //   playSong();
+
+      //   // Start recording
+      //   navigator.mediaDevices.getUserMedia({ audio: true })
+      //     .then(function(stream) {
+      //       userMediaStream = stream;
+      //       const mixedStream = audioContext.createMediaStreamSource(userMediaStream);
+      //       const destination = audioContext.createMediaStreamDestination();
+      //       mixedStream.connect(destination);
+      //       audioSource.connect(destination);
+      //       mediaRecorder = new MediaRecorder(destination.stream);
+      //       mediaRecorder.ondataavailable = function(e) {
+      //         audioChunks.push(e.data);
+      //       };
+      //       mediaRecorder.onstop = function() {
+      //         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+      //         const audioUrl = URL.createObjectURL(audioBlob);
+      //         audioElement.src = audioUrl;
+      //         audioElement.controls = true;
+      //         downloadAudio(audioBlob, audioUrl);
+      //         stopSong();
+      //         // Clear audioChunks for next recording
+      //         audioChunks = [];
+      //       };
+      //       mediaRecorder.start();
+      //       recordButton.disabled = true;
+      //       stopButton.disabled = false;
+      //     })
+      //     .catch(function(err) {
+      //       console.error('Error recording audio: ' + err);
+      //     });
+      // }
+
+      async function startRecording() {
+        await loadSong("./song.mp3");
+
+        // Start playing the song
+        playSong();
+
+        // Start recording
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then(function (stream) {
+            userMediaStream = stream;
+
+            // Create gain nodes for voice and background music
+            const voiceGain = audioContext.createGain();
+            const musicGain = audioContext.createGain();
+
+            // Adjust the gains to control volume levels
+            voiceGain.gain.value = 1; // Adjust as needed
+            musicGain.gain.value = 0.2; // Adjust as needed
+
+            const mixedStream =
+              audioContext.createMediaStreamSource(userMediaStream);
+            const destination = audioContext.createMediaStreamDestination();
+
+            // Connect the audio sources to the gain nodes
+            mixedStream.connect(voiceGain);
+            audioSource.connect(musicGain);
+
+            // Connect the gain nodes to the destination
+            voiceGain.connect(destination);
+            musicGain.connect(destination);
+
+            mediaRecorder = new MediaRecorder(destination.stream);
+            mediaRecorder.ondataavailable = function (e) {
+              audioChunks.push(e.data);
+            };
+            mediaRecorder.onstop = function () {
+              const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+              const audioUrl = URL.createObjectURL(audioBlob);
+              audioElement.src = audioUrl;
+              audioElement.controls = true;
+              downloadAudio(audioBlob, audioUrl);
+              stopSong();
+              // Clear audioChunks for next recording
+              audioChunks = [];
+            };
+            mediaRecorder.start();
+            recordButton.disabled = true;
+            stopButton.disabled = false;
+          })
+          .catch(function (err) {
+            console.error("Error recording audio: " + err);
+          });
+      }
+
+      function stopRecording() {
+        mediaRecorder.stop();
+        recordButton.disabled = false;
+        stopButton.disabled = true;
+        userMediaStream.getTracks().forEach((track) => track.stop());
+      }
+
+      function stopSong() {
+        if (audioSource) {
+          audioSource.stop();
+        }
+      }
+
+      function downloadAudio(blob, url) {
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = "recorded_audio.wav";
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+      }
+    </script>
+  </body>
+</html>
